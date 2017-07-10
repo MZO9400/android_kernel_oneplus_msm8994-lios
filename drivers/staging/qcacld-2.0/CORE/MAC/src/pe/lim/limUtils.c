@@ -726,6 +726,10 @@ limCleanupMlm(tpAniSirGlobal pMac)
             tx_timer_delete(&pAuthNode[n]->timer);
         }
 
+        // Deactivate and delete Hash Miss throttle timer
+        tx_timer_deactivate(&pMac->lim.limTimers.gLimSendDisassocFrameThresholdTimer);
+        tx_timer_delete(&pMac->lim.limTimers.gLimSendDisassocFrameThresholdTimer);
+
         tx_timer_deactivate(&pMac->lim.limTimers.gLimUpdateOlbcCacheTimer);
         tx_timer_delete(&pMac->lim.limTimers.gLimUpdateOlbcCacheTimer);
         tx_timer_deactivate(&pMac->lim.limTimers.gLimPreAuthClnupTimer);
@@ -2088,9 +2092,10 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
     tANI_U8    channel; // This is received and stored from channelSwitch Action frame
     tANI_U8 isSessionPowerActive = false;
 
-    if((psessionEntry = peFindSessionBySessionId(pMac, pMac->lim.limTimers.gLimChannelSwitchTimer.sessionId))== NULL)
-    {
-        limLog(pMac, LOGP,FL("Session Does not exist for given sessionID"));
+    psessionEntry = peFindSessionBySessionId(pMac,
+                       pMac->lim.limTimers.gLimChannelSwitchTimer.sessionId);
+    if (!psessionEntry) {
+        limLog(pMac, LOGW, FL("Session Does not exist for given sessionID"));
         return;
     }
 
@@ -2098,6 +2103,13 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
         PELOGW(limLog(pMac, LOGW,
                "Channel switch can be done only in STA role, Current Role = %d",
                GET_LIM_SYSTEM_ROLE(psessionEntry));)
+        return;
+    }
+    if (psessionEntry->gLimSpecMgmt.dot11hChanSwState !=
+                                  eLIM_11H_CHANSW_RUNNING) {
+        limLog(pMac, LOGW,
+            FL("Channel switch timer should not have been running in state %d"),
+            psessionEntry->gLimSpecMgmt.dot11hChanSwState);
         return;
     }
 
@@ -2109,7 +2121,6 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
     {
         isSessionPowerActive = limIsSystemInActiveState(pMac);
     }
-
     channel = psessionEntry->gLimChannelSwitch.primaryChannel;
 
     /*
@@ -2169,13 +2180,19 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
             return;
         }
 
-        /* If the channel-list that AP is asking us to switch is invalid,
+        /*
+         * If the channel-list that AP is asking us to switch is invalid,
          * then we cannot switch the channel. Just disassociate from AP.
          * We will find a better AP !!!
          */
-        limTearDownLinkWithAp(pMac,
+        if ((psessionEntry->limMlmState == eLIM_MLM_LINK_ESTABLISHED_STATE) &&
+           (psessionEntry->limSmeState != eLIM_SME_WT_DISASSOC_STATE)&&
+           (psessionEntry->limSmeState != eLIM_SME_WT_DEAUTH_STATE)) {
+              limLog(pMac, LOGE, FL("Invalid channel!! Disconnect.."));
+              limTearDownLinkWithAp(pMac,
                         pMac->lim.limTimers.gLimChannelSwitchTimer.sessionId,
                         eSIR_MAC_UNSPEC_FAILURE_REASON);
+        }
         return;
     }
     limCovertChannelScanType(pMac, psessionEntry->currentOperChannel, false);
@@ -5225,28 +5242,6 @@ void limDelAllBASessions(tpAniSirGlobal pMac)
         {
             limDeleteBASessions(pMac, pSessionEntry, BA_BOTH_DIRECTIONS);
         }
-    }
-}
-
-/** -------------------------------------------------------------
-\fn     limDelAllBASessionsBtc
-\brief  Deletes all the existing BA recipient sessions in 2.4GHz
-        band.
-\param  tpAniSirGlobal pMac
-\return None
--------------------------------------------------------------*/
-
-void limDelPerBssBASessionsBtc(tpAniSirGlobal pMac)
-{
-    tANI_U8 sessionId;
-    tpPESession pSessionEntry;
-    pSessionEntry = peFindSessionByBssid(pMac,pMac->btc.btcBssfordisableaggr,
-                                                                &sessionId);
-    if (pSessionEntry)
-    {
-        PELOGW(limLog(pMac, LOGW,
-        "Deleting the BA for session %d as host got BTC event", sessionId);)
-        limDeleteBASessions(pMac, pSessionEntry, BA_RECIPIENT);
     }
 }
 
@@ -8464,7 +8459,7 @@ eHalStatus lim_send_ext_cap_ie(tpAniSirGlobal mac_ctx,
 	if (merge && NULL != extra_extcap && extra_extcap->num_bytes > 0) {
 		if (extra_extcap->num_bytes > ext_cap_data.num_bytes)
 			num_bytes = extra_extcap->num_bytes;
-		lim_merge_extcap_struct(&ext_cap_data, extra_extcap, true);
+		lim_merge_extcap_struct(&ext_cap_data, extra_extcap);
 	}
 
 	/* Allocate memory for the WMI request, and copy the parameter */
@@ -8601,10 +8596,10 @@ void lim_update_extcap_struct(tpAniSirGlobal mac_ctx,
 	}
 
 	vos_mem_set((uint8_t *)&out[0], DOT11F_IE_EXTCAP_MAX_LEN, 0);
-	vos_mem_copy(&out[0], &buf[2], buf[1]);
+	vos_mem_copy(&out[0], &buf[2], DOT11F_IE_EXTCAP_MAX_LEN);
 
 	if (DOT11F_PARSE_SUCCESS != dot11fUnpackIeExtCap(mac_ctx, &out[0],
-                                        buf[1], dst))
+					DOT11F_IE_EXTCAP_MAX_LEN, dst))
 		limLog(mac_ctx, LOGE, FL("dot11fUnpackIeExtCap Parse Error "));
 }
 
@@ -8646,43 +8641,24 @@ tSirRetStatus lim_strip_extcap_update_struct(tpAniSirGlobal mac_ctx,
  * lim_merge_extcap_struct() - merge extended capabilities info
  * @dst: destination extended capabilities
  * @src: source extended capabilities
- * @add: true if add the capabilites, false if strip the capabilites.
  *
- * This function is used to take @src info and add/strip it to/from
- * @dst extended capabilities info.
+ * This function is used to take @src info and merge it with @dst
+ * extended capabilities info.
  *
  * Return: None
  */
 void lim_merge_extcap_struct(tDot11fIEExtCap *dst,
-			     tDot11fIEExtCap *src,
-			     bool add)
+			     tDot11fIEExtCap *src)
 {
 	uint8_t *tempdst = (uint8_t *)dst->bytes;
 	uint8_t *tempsrc = (uint8_t *)src->bytes;
 	uint8_t structlen = member_size(tDot11fIEExtCap, bytes);
 
-	/* Return if @src not present */
-	if (!src->present)
-		return;
-
-	/* Return if strip the capabilites from @dst which not present */
-	if (!dst->present && !add)
-		return;
-
-	/* Merge the capabilites info in other cases */
-	while (tempdst && tempsrc && structlen--) {
-		if (add)
-			*tempdst |= *tempsrc;
-		else
-			*tempdst &= *tempsrc;
+	while(tempdst && tempsrc && structlen--) {
+		*tempdst |= *tempsrc;
 		tempdst++;
 		tempsrc++;
 	}
-	dst->num_bytes = lim_compute_ext_cap_ie_length(dst);
-        if (dst->num_bytes == 0)
-		dst->present = 0;
-	else
-		dst->present = 1;
 }
 
 /**
@@ -8717,23 +8693,24 @@ lim_get_80Mhz_center_channel(uint8_t primary_channel)
 }
 
 /**
- * lim_compute_ext_cap_ie_length - compute the length of ext cap ie
- * based on the bits set
+ * lim_is_ext_cap_ie_present - checks if ext ie is present
  * @ext_cap: extended IEs structure
  *
- * Return: length of the ext cap ie, 0 means should not present
+ * Return: true if ext IEs are present else false
  */
-tANI_U8 lim_compute_ext_cap_ie_length (tDot11fIEExtCap *ext_cap) {
-	tANI_U8 i = DOT11F_IE_EXTCAP_MAX_LEN;
+bool lim_is_ext_cap_ie_present (struct s_ext_cap *ext_cap)
+{
+	int i, size;
+	uint8_t *tmp_buf;
 
-	while (i) {
-		if (ext_cap->bytes[i-1]) {
-			break;
-		}
-		i --;
-	}
+	tmp_buf = (uint8_t *) ext_cap;
+	size = sizeof(*ext_cap);
 
-	return i;
+	for (i = 0; i < size; i++)
+		if (tmp_buf[i])
+			return true;
+
+	return false;
 }
 
 /**

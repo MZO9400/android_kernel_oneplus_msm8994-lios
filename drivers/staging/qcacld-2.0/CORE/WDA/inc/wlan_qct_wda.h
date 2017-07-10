@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1094,12 +1094,7 @@ tSirRetStatus uMacPostCtrlMsg(void* pSirGlobal, tSirMbMsg* pMb);
 #define WDA_REMOVE_BCN_FILTER_CMDID           SIR_HAL_REMOVE_BCN_FILTER_CMDID
 
 #define WDA_UPDATE_TX_RATE                    SIR_HAL_UPDATE_TX_RATE
-#define WDA_UPDATE_TX_FAIL_CNT_TH             SIR_HAL_UPDATE_TX_FAIL_CNT_TH
-#define WDA_UPDATE_SHORT_RETRY_LIMIT_CNT      SIR_HAL_SHORT_RETRY_LIMIT_CNT
-#define WDA_UPDATE_LONG_RETRY_LIMIT_CNT       SIR_HAL_LONG_RETRY_LIMIT_CNT
-
-
-#define WDA_UPDATE_STA_INACTIVITY_TIMEOUT     SIR_HAL_STA_INACTIVITY_TIMEOUT
+#define WDA_ACTION_FRAME_RANDOM_MAC           SIR_HAL_ACTION_FRAME_RANDOM_MAC
 
 tSirRetStatus wdaPostCtrlMsg(tpAniSirGlobal pMac, tSirMsgQ *pMsg);
 

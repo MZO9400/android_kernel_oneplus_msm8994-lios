@@ -774,6 +774,12 @@ limSendDelStaCnf(tpAniSirGlobal pMac, tSirMacAddr staDsAddr,
         }
 
         psessionEntry->limAID = 0;
+
+    } else if (
+       (mlmStaContext.cleanupTrigger == eLIM_LINK_MONITORING_DISASSOC) ||
+       (mlmStaContext.cleanupTrigger == eLIM_LINK_MONITORING_DEAUTH)) {
+       /* only for non-STA cases PE/SME is serialized */
+       return;
     }
 
     if ((mlmStaContext.cleanupTrigger ==
@@ -3496,7 +3502,7 @@ limCheckAndAnnounceJoinSuccess(tpAniSirGlobal pMac,
         limPostSmeMessage(pMac, LIM_MLM_JOIN_CNF, (tANI_U32 *) &mlmJoinCnf);
     } // if ((pMac->lim.gLimSystemRole == IBSS....
 
-    if (psessionEntry->vhtCapability && pBPR->vendor2_ie.VHTCaps.present) {
+    if (pBPR->vendor2_ie.VHTCaps.present) {
         psessionEntry->is_vendor_specific_vhtcaps = true;
         psessionEntry->vendor_specific_vht_ie_type =
             pBPR->vendor2_ie.type;
@@ -4010,13 +4016,13 @@ tSirRetStatus limStaSendAddBss( tpAniSirGlobal pMac, tpSirAssocRsp pAssocRsp,
                 }
                 if ((vht_caps != NULL) && (vht_caps->suBeamFormerCap ||
                       vht_caps->muBeamformerCap) &&
-                      psessionEntry->txBFIniFeatureEnabled)
+                     psessionEntry->txBFIniFeatureEnabled)
                     pAddBssParams->staContext.vhtTxBFCapable = 1;
                 if ((vht_caps != NULL) &&
                             vht_caps->muBeamformerCap &&
                            psessionEntry->txMuBformee)
                     pAddBssParams->staContext.vhtTxMUBformeeCapable = 1;
-            }
+                }
 #endif
             if( (pAssocRsp->HTCaps.supportedChannelWidthSet) &&
                 (chanWidthSupp) )
@@ -4336,10 +4342,10 @@ tSirRetStatus limStaSendAddBssPreAssoc( tpAniSirGlobal pMac, tANI_U8 updateEntry
     vos_mem_set((tANI_U8 *) pAddBssParams, sizeof( tAddBssParams ), 0);
 
 
-    limExtractApCapabilities(pMac,
+    limExtractApCapabilities( pMac,
                             (tANI_U8 *) bssDescription->ieFields,
-                            GET_IE_LEN_IN_BSS(bssDescription->length),
-                            pBeaconStruct);
+                            limGetIElenFromBssDescription( bssDescription ),
+                            pBeaconStruct );
 
     if(pMac->lim.gLimProtectionControl != WNI_CFG_FORCE_POLICY_PROTECTION_DISABLE)
         limDecideStaProtectionOnAssoc(pMac, pBeaconStruct, psessionEntry);
@@ -4530,7 +4536,7 @@ tSirRetStatus limStaSendAddBssPreAssoc( tpAniSirGlobal pMac, tANI_U8 updateEntry
                      pAddBssParams->staContext.vhtTxBFCapable = 1;
                 if ((vht_caps != NULL) && vht_caps->muBeamformerCap &&
                                  psessionEntry->txMuBformee)
-                    pAddBssParams->staContext.vhtTxMUBformeeCapable = 1;
+                     pAddBssParams->staContext.vhtTxMUBformeeCapable = 1;
 
             }
 #endif

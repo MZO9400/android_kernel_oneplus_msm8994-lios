@@ -1180,7 +1180,6 @@ limProcessMlmAuthInd(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         // Log error
         limLog(pMac, LOGP,
            FL("call to AllocateMemory failed for eWNI_SME_AUTH_IND"));
-        return;
     }
     limCopyU16((tANI_U8 *) &pSirSmeAuthInd->messageType, eWNI_SME_AUTH_IND);
     limAuthIndSerDes(pMac, (tpLimMlmAuthInd) pMsgBuf,
@@ -2339,17 +2338,15 @@ void limProcessMlmDelStaRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ )
 
     SET_LIM_PROCESS_DEFD_MESGS(pMac, true);
 
-    if(!pDeleteStaParams) {
-        limLog(pMac, LOGP, FL("Invalid pDeleteStaParams message"));
-        return;
-    }
-
-    psessionEntry = peFindSessionBySessionId(pMac, pDeleteStaParams->sessionId);
-    if (!psessionEntry) {
-        limLog(pMac, LOGP, FL("Session Does not exist or invalid body pointer in message: %d"),
-                pDeleteStaParams->sessionId);
-        vos_mem_free(pDeleteStaParams);
-        limMsgQ->bodyptr = NULL;
+    if(NULL == pDeleteStaParams ||
+       NULL == (psessionEntry = peFindSessionBySessionId(pMac, pDeleteStaParams->sessionId)))
+    {
+        limLog(pMac, LOGP,FL("Session Does not exist or invalid body pointer in message"));
+        if(pDeleteStaParams != NULL)
+        {
+            vos_mem_free(pDeleteStaParams);
+            limMsgQ->bodyptr = NULL;
+        }
         return;
     }
 
@@ -4315,8 +4312,6 @@ void limProcessFinishScanRsp(tpAniSirGlobal pMac,  void *body)
     {
         case eLIM_HAL_FINISH_SCAN_WAIT_STATE:
             pMac->lim.gLimHalScanState = eLIM_HAL_IDLE_SCAN_STATE;
-            if (pMac->lim.abortScan)
-                pMac->lim.abortScan = 0;
             limCompleteMlmScan(pMac, eSIR_SME_SUCCESS);
             if (limIsChanSwitchRunning(pMac))
             {
@@ -4744,12 +4739,10 @@ limHandleDelBssInReAssocContext(tpAniSirGlobal pMac, tpDphHashNode pStaDs,tpPESe
             assocRsp = (tpSirAssocRsp)psessionEntry->limAssocResponseData;
             limUpdateAssocStaDatas(pMac, pStaDs, assocRsp,psessionEntry);
             limUpdateReAssocGlobals(pMac, assocRsp,psessionEntry);
-            limExtractApCapabilities(pMac,
-              (tANI_U8 *)
-              psessionEntry->pLimReAssocReq->bssDescription.ieFields,
-              GET_IE_LEN_IN_BSS(
-              psessionEntry->pLimReAssocReq->bssDescription.length),
-              pBeaconStruct);
+            limExtractApCapabilities( pMac,
+                  (tANI_U8 *) psessionEntry->pLimReAssocReq->bssDescription.ieFields,
+                  limGetIElenFromBssDescription( &psessionEntry->pLimReAssocReq->bssDescription ),
+                    pBeaconStruct );
             if(pMac->lim.gLimProtectionControl != WNI_CFG_FORCE_POLICY_PROTECTION_DISABLE)
                 limDecideStaProtectionOnAssoc(pMac, pBeaconStruct, psessionEntry);
                 if(pBeaconStruct->erpPresent) {
@@ -4919,11 +4912,10 @@ limHandleAddBssInReAssocContext(tpAniSirGlobal pMac, tpDphHashNode pStaDs, tpPES
             assocRsp = (tpSirAssocRsp)psessionEntry->limAssocResponseData;
             limUpdateAssocStaDatas(pMac, pStaDs, assocRsp, psessionEntry);
             limUpdateReAssocGlobals(pMac, assocRsp, psessionEntry);
-            limExtractApCapabilities(pMac,
-             (tANI_U8 *)psessionEntry->pLimReAssocReq->bssDescription.ieFields,
-             GET_IE_LEN_IN_BSS(
-             psessionEntry->pLimReAssocReq->bssDescription.length),
-             pBeaconStruct);
+            limExtractApCapabilities( pMac,
+                  (tANI_U8 *) psessionEntry->pLimReAssocReq->bssDescription.ieFields,
+                  limGetIElenFromBssDescription( &psessionEntry->pLimReAssocReq->bssDescription ),
+                    pBeaconStruct );
             if(pMac->lim.gLimProtectionControl != WNI_CFG_FORCE_POLICY_PROTECTION_DISABLE)
                 limDecideStaProtectionOnAssoc(pMac, pBeaconStruct, psessionEntry);
 
