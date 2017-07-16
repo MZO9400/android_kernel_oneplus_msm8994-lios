@@ -117,14 +117,13 @@ struct test_header {
 #define SWIPE_DETECT    0x07
 #define DTAP_DETECT     0x03
 
-static unsigned int enabled_gestures = 0;
 
 #define UnkownGestrue       0
 #define DouTap              1   // double tap
 #define UpVee               2   // V
 #define DownVee             3   // ^
-#define RightVee            4   // >
-#define LeftVee             5   // <
+#define LeftVee             4   // >
+#define RightVee            5   // <
 #define Circle              6   // O
 #define DouSwip             7   // ||
 #define Left2RightSwip      8   // -->
@@ -1124,26 +1123,6 @@ static void synaptics_get_coordinate_point(struct synaptics_ts_data *ts)
 		(coordinate_buf[24] & 0x20) ? 0 : 2; // 1--clockwise, 0--anticlockwise, not circle, report 2
 }
 
-static void set_gesture(const char __user *buf, int gesture)
-{
-	int ret = 0;
-	struct synaptics_ts_data *ts = ts_g;
-
-	sscanf(buf, "%d", &ret);
-	if (ret == 1)
-		enabled_gestures |= 1 << (gesture - 1);
-	else if (ret == 0)
-		enabled_gestures &= ~(1 << (gesture - 1));
-
-	ts->double_enable = enabled_gestures == 0 ? 0 : 1;
-	syna_use_gesture = ts->double_enable;
-}
-
-static int gesture_enabled(int gesture)
-{
-	return (enabled_gestures & (1 << (gesture - 1))) > 0 ? 1 : 0;
-}
-
 static void gesture_judge(struct synaptics_ts_data *ts)
 {
 	unsigned int keyCode = KEY_F4;
@@ -1184,8 +1163,8 @@ static void gesture_judge(struct synaptics_ts_data *ts)
 		case VEE_DETECT:
 			gesture = (gesture_buffer[2] == 0x01) ? DownVee  :
 				(gesture_buffer[2] == 0x02) ? UpVee    :
-				(gesture_buffer[2] == 0x04) ? LeftVee :
-				(gesture_buffer[2] == 0x08) ? RightVee  :
+				(gesture_buffer[2] == 0x04) ? RightVee :
+				(gesture_buffer[2] == 0x08) ? LeftVee  :
 				UnkownGestrue;
 			break;
 		case UNICODE_DETECT:
@@ -1252,7 +1231,8 @@ static void gesture_judge(struct synaptics_ts_data *ts)
 		input_sync(ts->input_dev);
 		input_report_key(ts->input_dev, keyCode, 0);
 		input_sync(ts->input_dev);
-	} else {
+	}else{
+
 		ret = i2c_smbus_read_i2c_block_data( ts->client, F12_2D_CTRL20, 3, &(reportbuf[0x0]) );
 		ret = reportbuf[2] & 0x20;
 		if(ret == 0)
@@ -1442,6 +1422,19 @@ static ssize_t i2c_device_test_read_func(struct file *file, char __user *user_bu
 }
 
 #ifdef SUPPORT_GESTURE
+static ssize_t tp_gesture_read_func(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
+{
+	int ret = 0;
+	char page[PAGESIZE];
+	struct synaptics_ts_data *ts = ts_g;
+	if(!ts)
+		return ret;
+	TPD_DEBUG("gesture enable is: %d\n", ts->double_enable);
+	ret = sprintf(page, "%d\n", ts->double_enable);
+	ret = simple_read_from_buffer(user_buf, count, ppos, page, strlen(page));
+	return ret;
+}
+extern int syna_use_gesture;
 //EXPORT_SYMBOL(syna_use_gesture);
 
 static ssize_t tp_gesture_write_func(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
@@ -1726,31 +1719,24 @@ static ssize_t down_arrow_enable_write_func(struct file *file, const char __user
 
 // chenggang.li@BSP.TP modified for oem 2014-08-08 create node
 /******************************start****************************/
+static const struct file_operations tp_gesture_proc_fops = {
+	.write = tp_gesture_write_func,
+	.read =  tp_gesture_read_func,
+	.open = simple_open,
+	.owner = THIS_MODULE,
+};
+
 static const struct file_operations coordinate_proc_fops = {
 	.read =  coordinate_proc_read_func,
 	.open = simple_open,
 	.owner = THIS_MODULE,
 };
 
-#define TS_ENABLE_FOPS(type) \
-static ssize_t type##_read_func(struct file *file, char __user *user_buf, size_t count, loff_t *ppos) \
-{ \
-	int ret = 0; \
-	char page[PAGESIZE]; \
-	ret = sprintf(page, "%d\n", gesture_enabled(type)); \
-	ret = simple_read_from_buffer(user_buf, count, ppos, page, strlen(page)); \
-	return ret; \
-} \
-static ssize_t type##_write_func(struct file *file, const char __user *buf, size_t count, loff_t *ppos) \
-{ \
-	set_gesture(buf, type); \
-	return count; \
-} \
-static const struct file_operations type##_proc_fops = { \
-	.write = type##_write_func, \
-	.read =  type##_read_func, \
-	.open = simple_open, \
-	.owner = THIS_MODULE, \
+static const struct file_operations double_tap_enable_proc_fops = {
+	.write = double_tap_enable_write_func,
+	.read =  double_tap_enable_read_func,
+	.open = simple_open,
+	.owner = THIS_MODULE,
 };
 
 static const struct file_operations letter_o_enable_proc_fops = {
@@ -2190,7 +2176,6 @@ static ssize_t synaptics_rmi4_baseline_show_s3508(struct device *dev, char *buf,
 	   num_read_chars += sprintf(&(buf[num_read_chars]), "%d error(s). %s\n", error_count, error_count?"":"All test passed.");
 	   return num_read_chars;
 	   }
-
 	//ph = (struct test_header *)(fw->data);
 	 */
 	mutex_lock(&ts->mutex);
@@ -2478,7 +2463,6 @@ static ssize_t synaptics_rmi4_vendor_id_show(struct device *dev,
 static int	synaptics_input_init(struct synaptics_ts_data *ts)
 {
 	int attr_count = 0;
-	int i;
 	int ret = 0;
 
 	TPD_DEBUG("%s is called\n",__func__);
@@ -3543,8 +3527,6 @@ static int synaptics_ts_probe(struct i2c_client *client, const struct i2c_device
 	strcpy(ts->test_limit_name,"tp/14049/14049_Limit_jdi.img");
 	TPD_DEBUG("synatpitcs_fw: fw_name = %s \n",ts->fw_name);
 
-	push_component_info(TP, ts->fw_id, ts->manu_name);
-
 	synaptics_wq = create_singlethread_workqueue("synaptics_wq");
 	if( !synaptics_wq ){
 		ret = -ENOMEM;
@@ -3789,6 +3771,9 @@ static void speedup_synaptics_resume(struct work_struct *work)
 static int synaptics_ts_resume(struct device *dev)
 {
 	int ret;
+	#ifdef VENDOR_EDIT  // shankai@bsp , 2016-6-6,try to  relase all the key when tp resume
+	int i;
+	#endif 
 	struct synaptics_ts_data *ts = dev_get_drvdata(dev);
 
 	TPD_ERR("%s is called\n", __func__);
@@ -3817,8 +3802,29 @@ static int synaptics_ts_resume(struct device *dev)
 	}
 
 	//ts->is_suspended = 0;
+
+#ifdef VENDOR_EDIT  // shankai@bsp , 2016-6-6,try to  relase all the key when tp resume
+	for (i = 0; i < ts->max_num; i++)
+
+	{
+
+		input_mt_slot(ts->input_dev, i);
+
+		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 1);
+
+		input_mt_slot(ts->input_dev, i);
+
+		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+
+	}
+#endif
+
+
 #ifndef TYPE_B_PROTOCOL
 	input_mt_sync(ts->input_dev);
+#endif
+#ifdef VENDOR_EDIT  // shankai@bsp , 2016-6-6,try to  relase all the key when tp resume
+	input_report_key(ts->input_dev, BTN_TOOL_FINGER, 0);
 #endif
 	input_sync(ts->input_dev);
 
