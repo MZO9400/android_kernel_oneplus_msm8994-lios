@@ -20,7 +20,7 @@ export CROSS_COMPILE=${HOME}/Android/ToolChains/aarch64-linux-android-4.9/bin/aa
 KERNEL_DIR="${HOME}/Android/kernel/lios"
 ANYKERNEL_DIR="$KERNEL_DIR/anykernel2"
 MODULES_DIR="$ANYKERNEL_DIR/modules"
-ZIP_MOVE_NIGHTLY="${HOME}/Android/kernel/one_plus_2/out/$DEVICE"
+ZIP_MOVE_NIGHTLY="${HOME}/Android/kernel/lios/out/$DEVICE"
 ZIMAGE_DIR="$KERNEL_DIR/arch/arm64/boot"
 
 # Functions
@@ -41,8 +41,8 @@ function make_kernel {
 function make_zip {
 		cp -vr $ZIMAGE_DIR/$KERNEL $ANYKERNEL_DIR/$KERNEL
 		cd $ANYKERNEL_DIR
-		zip -r9 tocino-$DEVICE-$KERNEL_VER.zip *
-		mv tocino-$DEVICE-$KERNEL_VER.zip $ZIP_MOVE_NIGHTLY
+		zip -r9 du-$DEVICE-$KERNEL_VER.zip *
+		mv du-$DEVICE-$KERNEL_VER.zip $ZIP_MOVE_NIGHTLY
 		cd $KERNEL_DIR
 }
 
