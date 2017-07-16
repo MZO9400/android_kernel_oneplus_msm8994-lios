@@ -26,7 +26,7 @@ dump_boot;
 # begin ramdisk changes
 
 # init.qcom.rc
-insert_line init.qcom.rc "init.fk.rc" after "import init.qcom.power.rc" "import init.fk.rc";
+insert_line init.qcom.rc "init.lios.rc"
 #replace_string init.angler.rc "#    verity_load_state" "    verity_load_state" "#    verity_load_state"
 #replace_string init.angler.rc "#    verity_update_state" "    verity_update_state" "#    verity_update_state"
 #replace_section init.angler.rc "service atfwd" "group system radio" "service atfwd /system/bin/ATFWD-daemon\n    disabled\n    class late_start\n    user system\n    group system radio";
