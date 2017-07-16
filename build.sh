@@ -14,7 +14,7 @@ DEVICE="oneplus2"
 VARIANT=$(date +"%Y%m%d")
 export ARCH=arm64
 export SUBARCH=arm64
-export CROSS_COMPILE=${HOME}/Android/ToolChains/aarch64-linux-android-8.x/bin/aarch64-linux-android-
+export CROSS_COMPILE=${HOME}/Android/ToolChains/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 
 # Paths
 KERNEL_DIR="${HOME}/Android/kernel/lios"
